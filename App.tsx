@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import StepGuide from './components/StepGuide';
+import AddressAutocomplete from './components/AddressAutocomplete';
 import { Persona, AppointmentType, TimeSlot } from './types';
 import { APPOINTMENT_TYPES } from './constants';
 import { fetchAvailability, createBooking } from './services/mockApi';
@@ -23,7 +24,7 @@ const App: React.FC = () => {
     email: '',
     phone: '',
     notes: '',
-    propertyAddress: '',
+    propertyAddress: null as any, // Will store the structured object
     closingDate: '',
     agentName: '',
     companyName: ''
@@ -44,6 +45,14 @@ const App: React.FC = () => {
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation for Buyer/Seller addresses
+    if ((selectedPersona === 'Buyer' || selectedPersona === 'Seller') && 
+        (!formData.propertyAddress?.placeId || !formData.propertyAddress?.street1 || !formData.propertyAddress?.city)) {
+      alert('Please select a valid property address from the suggestions.');
+      return;
+    }
+
     setIsLoading(true);
     const id = await createBooking({
       persona: selectedPersona,
@@ -55,6 +64,14 @@ const App: React.FC = () => {
     setIsLoading(false);
     setStep('success');
   };
+
+  const HoursNotice = () => (
+    <div className="text-center py-2 border-b border-slate-100 bg-white">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+        Hours: Monday to Friday, 8:30 AM to 6:30 PM America/New_York
+      </p>
+    </div>
+  );
 
   const renderPersonaSelection = () => (
     <div className="max-w-4xl mx-auto px-4 py-12 md:py-20 animate-fadeIn">
@@ -225,9 +242,11 @@ const App: React.FC = () => {
 
           {(selectedPersona === 'Buyer' || selectedPersona === 'Seller') && (
             <>
-              <div className="md:col-span-2 space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Property Address</label>
-                <input required type="text" value={formData.propertyAddress} onChange={e => setFormData({...formData, propertyAddress: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-brand-blue outline-none transition-colors" placeholder="123 Main St, City, ST" />
+              <div className="md:col-span-2">
+                <AddressAutocomplete 
+                  onAddressSelect={(address) => setFormData({...formData, propertyAddress: address})}
+                  defaultValue={formData.propertyAddress?.formattedAddress}
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Est. Closing Date</label>
@@ -278,8 +297,15 @@ const App: React.FC = () => {
         <div className="w-16 h-16 bg-teal-50 text-brand-teal rounded-full flex items-center justify-center text-3xl mx-auto mb-6">✓</div>
         <h2 className="text-2xl font-bold text-brand-blue mb-2">Appointment Secured</h2>
         <p className="text-slate-500 text-sm mb-1">A confirmation has been sent to <strong>{formData.email}</strong></p>
-        <p className="text-brand-teal font-bold text-sm tracking-widest mb-10">CONFIRMATION: {bookingId}</p>
+        <p className="text-brand-teal font-bold text-sm tracking-widest mb-4">CONFIRMATION: {bookingId}</p>
         
+        {formData.propertyAddress && (
+          <div className="mb-8 p-3 bg-slate-50 rounded-lg border border-slate-100">
+            <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Scheduled Closing For</p>
+            <p className="text-sm font-semibold text-slate-700">{formData.propertyAddress.formattedAddress}</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10">
           <button className="flex items-center justify-center space-x-2 border border-slate-200 py-3 rounded-lg hover:bg-slate-50 transition-colors font-semibold text-slate-600 text-xs uppercase tracking-wider">
             <span>📅</span> <span>Add to Calendar</span>
@@ -300,6 +326,7 @@ const App: React.FC = () => {
 
   return (
     <Layout>
+      <HoursNotice />
       <div className="transition-all duration-300">
         {step === 'persona' && renderPersonaSelection()}
         {step === 'type' && renderTypeSelection()}

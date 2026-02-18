@@ -2,13 +2,13 @@
 import { AppointmentType, Persona, LocationType } from './types';
 
 export const BUSINESS_HOURS_DEFAULT = {
-  'monday': { start: '09:00', end: '17:00' },
-  'tuesday': { start: '09:00', end: '17:00' },
-  'wednesday': { start: '09:00', end: '17:00' },
-  'thursday': { start: '09:00', end: '17:00' },
-  'friday': { start: '09:00', end: '17:00' },
-  'saturday': null,
-  'sunday': null,
+  'mon': { start: '08:30', end: '18:30' },
+  'tue': { start: '08:30', end: '18:30' },
+  'wed': { start: '08:30', end: '18:30' },
+  'thu': { start: '08:30', end: '18:30' },
+  'fri': { start: '08:30', end: '18:30' },
+  'sat': null,
+  'sun': null,
 };
 
 export const APPOINTMENT_TYPES: AppointmentType[] = [
