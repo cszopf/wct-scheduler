@@ -276,10 +276,15 @@ const App: React.FC = () => {
           {(selectedPersona === 'Buyer' || selectedPersona === 'Seller') && (
             <>
               <div className="md:col-span-2">
+                {/* 
+                  Deterministic placement of AddressAutocomplete.
+                  We ensure it is always rendered under step === 'form' 
+                  and the props are updated via parent state without triggering remount.
+                */}
                 <AddressAutocomplete 
                   value={formData.propertyAddress?.formattedAddress || formData.manualPropertyAddress}
-                  onValueChange={(val) => setFormData({...formData, manualPropertyAddress: val})}
-                  onSelect={(address) => setFormData({...formData, propertyAddress: address})}
+                  onValueChange={(val) => setFormData(prev => ({...prev, manualPropertyAddress: val}))}
+                  onSelect={(address) => setFormData(prev => ({...prev, propertyAddress: address}))}
                 />
               </div>
               <div className="space-y-1.5">

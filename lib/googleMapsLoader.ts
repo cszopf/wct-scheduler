@@ -37,12 +37,12 @@ export async function loadGoogleMapsPlaces(): Promise<void> {
 
   mapsPromise = new Promise(async (resolve, reject) => {
     try {
-      // Fetch runtime config
+      // Fetch runtime config (to avoid build-time env injection issues)
       const config = await getPublicConfig();
       const key = config.googleMapsKey;
 
-      if (!key || key.length < 10) {
-        lastError = "Missing maps key in runtime config";
+      if (!key || key === 'undefined' || key.trim() === '' || key.length < 10) {
+        lastError = "Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in client bundle (via /api/public-config)";
         mapsStatus = 'error';
         console.error("Maps loader error:", lastError);
         return reject(new Error(lastError));
@@ -78,7 +78,7 @@ export async function loadGoogleMapsPlaces(): Promise<void> {
       }, 12000);
 
       script.onload = () => {
-        // Double check for library availability
+        // Double check for library availability using interval to catch race conditions
         const checkInterval = setInterval(() => {
           if ((window as any).google?.maps?.places) {
             clearTimeout(timeoutId);

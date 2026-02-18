@@ -1,7 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { loadGoogleMapsPlaces, getMapsStatus } from '../lib/googleMapsLoader';
-import { getGoogleMapsKeySync, hasGoogleMapsKeySync } from '../lib/publicEnv';
 
 export interface StructuredAddress {
   formattedAddress: string;
@@ -27,48 +26,51 @@ interface Props {
 const AddressAutocomplete: React.FC<Props> = ({ value, onValueChange, onSelect, disabled }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const acRef = useRef<any>(null);
+  const listenerRef = useRef<any>(null);
   const initRef = useRef(false);
+  const mountIdRef = useRef(Math.random().toString(36).substring(7));
   
+  // Stable refs for props to prevent effect re-runs
+  const onSelectRef = useRef(onSelect);
+  const onValueChangeRef = useRef(onValueChange);
+
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState<boolean>(false);
 
+  // Keep callback refs updated without triggering effects
   useEffect(() => {
-    // Prevent multiple trigger in StrictMode
+    onSelectRef.current = onSelect;
+    onValueChangeRef.current = onValueChange;
+  }, [onSelect, onValueChange]);
+
+  useEffect(() => {
+    console.log(`AddressAutocomplete mounted [${mountIdRef.current}]`);
+    
     if (initRef.current) return;
     initRef.current = true;
 
-    const init = async () => {
+    const initialize = async () => {
       try {
         await loadGoogleMapsPlaces();
-        setStatus('ready');
-      } catch (err: any) {
-        setLoadError(err.message || "Failed to load Google Maps");
-        setStatus('error');
-      }
-    };
+        
+        // Assert availability
+        if (!(window as any).google?.maps?.places?.Autocomplete) {
+          throw new Error("Places library missing after script load");
+        }
 
-    init();
+        if (!inputRef.current) return;
+        if (acRef.current) return;
 
-    return () => {
-      // Cleanup listener if instance exists
-      if (acRef.current && (window as any).google?.maps?.event) {
-        (window as any).google.maps.event.clearInstanceListeners(acRef.current);
-      }
-    };
-  }, []); // Run exactly once on mount
-
-  // Separate effect for Autocomplete initialization once library is ready
-  useEffect(() => {
-    if (status === 'ready' && inputRef.current && !acRef.current) {
-      try {
+        // Create Autocomplete instance
         acRef.current = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
           types: ['address'],
           componentRestrictions: { country: 'us' },
           fields: ['address_components', 'formatted_address', 'geometry', 'place_id'],
         });
 
-        acRef.current.addListener('place_changed', () => {
+        // Store listener for cleanup
+        listenerRef.current = acRef.current.addListener('place_changed', () => {
           const place = acRef.current?.getPlace();
           if (!place || !place.address_components) return;
 
@@ -103,23 +105,31 @@ const AddressAutocomplete: React.FC<Props> = ({ value, onValueChange, onSelect, 
 
           address.street1 = `${streetNumber} ${route}`.trim();
           
-          onValueChange(address.formattedAddress);
-          onSelect(address);
+          onValueChangeRef.current(address.formattedAddress);
+          onSelectRef.current(address);
         });
-      } catch (e) {
-        console.error("Error initializing Autocomplete:", e);
+
+        setStatus('ready');
+      } catch (err: any) {
+        console.error("AddressAutocomplete init error:", err);
+        setLocalError(err.message || "Failed to initialize Places");
         setStatus('error');
       }
-    }
-  }, [status, onValueChange, onSelect]);
+    };
 
-  const getMaskedKey = () => {
-    const key = getGoogleMapsKeySync();
-    if (key.length <= 10) return "Key not returned by /api/public-config";
-    return `${key.substring(0, 6)}...${key.substring(key.length - 4)}`;
-  };
+    initialize();
 
-  if (status === 'error' || loadError) {
+    return () => {
+      console.log(`AddressAutocomplete unmounted [${mountIdRef.current}]`);
+      if (listenerRef.current && (window as any).google?.maps?.event) {
+        (window as any).google.maps.event.removeListener(listenerRef.current);
+      }
+    };
+  }, []); // Static dependency array is CRITICAL
+
+  const { mapsStatus, lastError } = getMapsStatus();
+
+  if (status === 'error' || mapsStatus === 'error') {
     return (
       <div className="space-y-2">
         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Property Address *</label>
@@ -147,16 +157,11 @@ const AddressAutocomplete: React.FC<Props> = ({ value, onValueChange, onSelect, 
           <div className="bg-slate-900 text-slate-300 p-3 rounded-lg text-[9px] font-mono leading-relaxed border border-slate-700">
             <p className="text-brand-teal mb-1 font-bold">Diagnostic Information:</p>
             <p><span className="text-slate-500">Hostname:</span> {window.location.hostname}</p>
-            <p><span className="text-slate-500">Key from /api/public-config:</span> {hasGoogleMapsKeySync() ? 'Yes' : 'No'}</p>
-            <p><span className="text-slate-500">Key Masked:</span> {getMaskedKey()}</p>
-            <p className="mt-1 text-red-400"><span className="text-slate-500">Error:</span> {loadError || getMapsStatus().lastError}</p>
-            <div className="mt-2 pt-2 border-t border-slate-800 text-slate-400 italic">
-              {!hasGoogleMapsKeySync() ? (
-                <span className="text-yellow-400">Key not present in the runtime config. Ensure GOOGLE_MAPS_API_KEY is set in Vercel.</span>
-              ) : (
-                <span>Check billing, API enablement, and HTTP referrer restrictions.</span>
-              )}
-            </div>
+            <p><span className="text-slate-500">Mount ID:</span> {mountIdRef.current}</p>
+            <p><span className="text-slate-500">Maps Status:</span> {mapsStatus}</p>
+            <p><span className="text-slate-500">Global Error:</span> {lastError || 'None'}</p>
+            <p><span className="text-slate-500">Local Error:</span> {localError || 'None'}</p>
+            <p><span className="text-slate-500">Google Object:</span> {!!(window as any).google ? 'Exists' : 'Missing'}</p>
           </div>
         )}
       </div>
