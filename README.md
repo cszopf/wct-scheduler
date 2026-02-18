@@ -26,7 +26,7 @@ A custom-built scheduling experience for WCT integrated with Google Calendar.
 ### 3. Google Places setup
 1. Enable **Maps JavaScript API** AND **Places API** in Google Cloud.
 2. Ensure **Billing** is enabled for the project.
-3. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in Vercel environment variables.
+3. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` in Vercel environment variables.
 4. **CRITICAL: Restrict the key** under Google Cloud Credentials:
    - **Application restrictions**: HTTP referrers
    - **Allowed referrers**: 
@@ -37,16 +37,31 @@ A custom-built scheduling experience for WCT integrated with Google Calendar.
      - `https://www.worldclasstitle.com/*`
    - **API restrictions**: Restrict key to **Maps JavaScript API** and **Places API**.
 
-### 4. Google Maps troubleshooting
+### 4. Vercel env vars required for Google Places
+The system uses a runtime API (`/api/public-config`) to fetch the key. For this to work:
+
+1. **In Vercel Dashboard**:
+   - Project -> Settings -> Environment Variables.
+2. **Add `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`** (or just `GOOGLE_MAPS_API_KEY`):
+   - Set the value to your restricted Google Maps API key.
+   - Select **Production**, **Preview**, and **Development** environments.
+3. **IMPORTANT: Redeploy after adding env vars**:
+   - Go to the **Deployments** tab.
+   - Find your latest deployment.
+   - Click the three-dot menu (...) and select **Redeploy**.
+4. **Validation**:
+   - Visit `/debug/env?token=dev` to confirm the key is correctly returned by the runtime API.
+
+### 5. Google Maps troubleshooting
 If autocomplete fails to load, check these common causes:
 - □ **Billing enabled**: The project MUST have a valid billing account linked.
 - □ **Maps JavaScript API enabled**: Required for the frontend loader.
 - □ **Places API enabled**: Required for the autocomplete search.
-- □ **Referrer restriction**: Ensure the exact domain you are using is in the allowed list (including `https://*.vercel.app/*` for previews).
-- □ **Redeployed**: After changing environment variables in Vercel, you MUST trigger a new deployment for changes to take effect.
+- □ **Referrer restriction**: Ensure the exact domain you are using is in the allowed list.
+- □ **Runtime API access**: Ensure `/api/public-config` returns a valid JSON payload with `googleMapsKey`.
 - □ **Technical Diagnostic**: Click the "Show technical diagnostic info" link in the UI during a failure for real-time error messages.
 
-### 5. Local Development
+### 6. Local Development
 ```bash
 npm run dev
 ```

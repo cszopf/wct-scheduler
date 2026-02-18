@@ -1,6 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { loadGoogleMapsPlaces, getLastMapsLoadError } from '../lib/googleMapsLoader';
+import { getGoogleMapsKeySync, hasGoogleMapsKeySync } from '../lib/publicEnv';
 
 export interface StructuredAddress {
   formattedAddress: string;
@@ -33,7 +34,6 @@ const AddressAutocomplete: React.FC<Props> = ({ value, onValueChange, onSelect, 
   useEffect(() => {
     loadGoogleMapsPlaces()
       .then(() => {
-        // Hard assert the library exists
         if (!(window as any).google?.maps?.places?.Autocomplete) {
           throw new Error("Places library missing after load");
         }
@@ -98,8 +98,8 @@ const AddressAutocomplete: React.FC<Props> = ({ value, onValueChange, onSelect, 
   };
 
   const getMaskedKey = () => {
-    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-    if (key.length <= 10) return "Key too short or missing";
+    const key = getGoogleMapsKeySync();
+    if (key.length <= 10) return "Key not returned by /api/public-config";
     return `${key.substring(0, 6)}...${key.substring(key.length - 4)}`;
   };
 
@@ -131,11 +131,15 @@ const AddressAutocomplete: React.FC<Props> = ({ value, onValueChange, onSelect, 
           <div className="bg-slate-900 text-slate-300 p-3 rounded-lg text-[9px] font-mono leading-relaxed border border-slate-700">
             <p className="text-brand-teal mb-1 font-bold">Diagnostic Information:</p>
             <p><span className="text-slate-500">Hostname:</span> {window.location.hostname}</p>
-            <p><span className="text-slate-500">Key Exists:</span> {!!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? 'Yes' : 'No'}</p>
+            <p><span className="text-slate-500">Key from /api/public-config:</span> {hasGoogleMapsKeySync() ? 'Yes' : 'No'}</p>
             <p><span className="text-slate-500">Key Masked:</span> {getMaskedKey()}</p>
             <p className="mt-1 text-red-400"><span className="text-slate-500">Error:</span> {loadError}</p>
             <div className="mt-2 pt-2 border-t border-slate-800 text-slate-400 italic">
-              Check billing, API enablement (Maps JS + Places), and HTTP referrer restrictions in Google Cloud Console.
+              {!hasGoogleMapsKeySync() ? (
+                <span className="text-yellow-400">Key not present in the client bundle. In Vercel, set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY for Production + Preview + Development and redeploy. Then hard refresh.</span>
+              ) : (
+                <span>Check billing, API enablement (Maps JS + Places), and HTTP referrer restrictions in Google Cloud Console.</span>
+              )}
             </div>
           </div>
         )}

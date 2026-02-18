@@ -53,12 +53,16 @@ export const fetchAvailability = async (typeId: string, dateStr: string): Promis
   return slots;
 };
 
-export const createBooking = async (data: any): Promise<string> => {
+export const createBooking = async (data: any): Promise<{ id: string, googleEventId: string }> => {
   await delay(1200);
   
-  // Simulation of Server-Side Event Description generation
-  const addr = data.propertyAddress;
-  const description = `
+  const addr = data.propertyAddress || { formattedAddress: 'N/A', placeId: 'N/A', lat: 0, lng: 0 };
+  
+  // Google Calendar Integration Payload Simulation
+  const calendarEvent = {
+    summary: `WCT: ${data.persona} Closing - ${data.firstName} ${data.lastName}`,
+    location: addr.formattedAddress,
+    description: `
 WCT: ${data.persona} Closing
 Contact: ${data.firstName} ${data.lastName} (${data.phone})
 Email: ${data.email}
@@ -69,11 +73,31 @@ Place ID: ${addr.placeId}
 Lat/Lng: ${addr.lat},${addr.lng}
 
 Notes: ${data.notes || 'None'}
-  `.trim();
+    `.trim(),
+    start: {
+      dateTime: data.slot.start,
+      timeZone: 'America/New_York',
+    },
+    end: {
+      dateTime: data.slot.end,
+      timeZone: 'America/New_York',
+    },
+    attendees: [
+      { email: data.email },
+      { email: 'closings@worldclasstitle.com' }
+    ]
+  };
 
-  console.log('--- SERVER SIDE PROCESSING SIMULATION ---');
-  console.log('Final Event Description:', description);
-  console.log('Storing structured address in database:', addr);
+  const mockGoogleEventId = `gcal_${Math.random().toString(36).substring(7)}`;
+
+  console.log('--- GOOGLE CALENDAR API INTEGRATION ---');
+  console.log('API Endpoint: POST https://www.googleapis.com/calendar/v3/calendars/primary/events');
+  console.log('Payload:', calendarEvent);
+  console.log('Response Status: 200 OK');
+  console.log('Google Event ID Created:', mockGoogleEventId);
   
-  return Math.random().toString(36).substring(7).toUpperCase();
+  return {
+    id: Math.random().toString(36).substring(7).toUpperCase(),
+    googleEventId: mockGoogleEventId
+  };
 };

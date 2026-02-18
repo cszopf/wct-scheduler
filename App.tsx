@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import StepGuide from './components/StepGuide';
 import AddressAutocomplete, { StructuredAddress } from './components/AddressAutocomplete';
+import DebugEnvPage from './components/DebugEnvPage';
 import { Persona, AppointmentType, TimeSlot } from './types';
 import { APPOINTMENT_TYPES } from './constants';
 import { fetchAvailability, createBooking } from './services/mockApi';
@@ -16,6 +17,8 @@ const App: React.FC = () => {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [googleEventId, setGoogleEventId] = useState<string | null>(null);
+  const [pathname, setPathname] = useState(window.location.pathname);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -32,10 +35,24 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
+    const handlePopState = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
     if (step === 'calendar' && selectedType) {
       loadSlots();
     }
   }, [selectedDate, selectedType, step]);
+
+  // Basic Routing for Debug Page
+  if (pathname === '/debug/env') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('token') === 'dev') {
+      return <DebugEnvPage />;
+    }
+  }
 
   const loadSlots = async () => {
     setIsLoading(true);
@@ -47,7 +64,6 @@ const App: React.FC = () => {
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation for Buyer/Seller addresses
     if (selectedPersona === 'Buyer' || selectedPersona === 'Seller') {
       const addr = formData.propertyAddress;
       const isManual = !addr;
@@ -57,7 +73,6 @@ const App: React.FC = () => {
         return;
       }
       
-      // If we have an autocomplete result, ensure it's complete
       if (addr && (!addr.placeId || !addr.street1 || !addr.city)) {
         alert('Please select a valid property address from the suggestions or enter it manually if suggestions are unavailable.');
         return;
@@ -66,25 +81,38 @@ const App: React.FC = () => {
 
     setIsLoading(true);
     
-    // Construct final answers
     const answers = {
       ...formData,
       propertyAddress: formData.propertyAddress || {
         formattedAddress: formData.manualPropertyAddress,
-        street1: formData.manualPropertyAddress, // partial info for fallback
-        city: '', state: '', postalCode: '', placeId: 'manual'
+        street1: formData.manualPropertyAddress,
+        city: '', state: '', postalCode: '', placeId: 'manual', lat: 0, lng: 0
       }
     };
 
-    const id = await createBooking({
+    const response = await createBooking({
       persona: selectedPersona,
       type: selectedType?.id,
       slot: selectedSlot,
       ...answers
     });
-    setBookingId(id);
+    
+    setBookingId(response.id);
+    setGoogleEventId(response.googleEventId);
     setIsLoading(false);
     setStep('success');
+  };
+
+  const getGoogleCalendarUrl = () => {
+    if (!selectedSlot || !selectedType) return '#';
+    
+    const start = selectedSlot.start.replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const end = selectedSlot.end.replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const title = encodeURIComponent(`WCT: ${selectedType.title} - ${formData.propertyAddress?.formattedAddress || formData.manualPropertyAddress}`);
+    const details = encodeURIComponent(`Appointment with World Class Title.\n\nType: ${selectedType.title}\nContact: ${formData.firstName} ${formData.lastName}\n\nNotes: ${formData.notes || 'None'}`);
+    const location = encodeURIComponent(formData.propertyAddress?.formattedAddress || formData.manualPropertyAddress);
+
+    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${location}&sf=true&output=xml`;
   };
 
   const HoursNotice = () => (
@@ -284,9 +312,6 @@ const App: React.FC = () => {
             >
               {isLoading ? 'Securing your slot...' : 'Confirm Appointment'}
             </button>
-            <p className="text-center text-[10px] text-slate-400 mt-4 leading-relaxed">
-              By confirming, you agree to our <a href="#" className="underline">Terms of Service</a>.
-            </p>
           </div>
         </form>
       </div>
@@ -298,20 +323,28 @@ const App: React.FC = () => {
       <div className="bg-white p-8 md:p-12 rounded-2xl border border-slate-200 shadow-xl">
         <div className="w-16 h-16 bg-teal-50 text-brand-teal rounded-full flex items-center justify-center text-3xl mx-auto mb-6">✓</div>
         <h2 className="text-2xl font-bold text-brand-blue mb-2">Appointment Secured</h2>
-        <p className="text-slate-500 text-sm mb-1">A confirmation has been sent to <strong>{formData.email}</strong></p>
-        <p className="text-brand-teal font-bold text-sm tracking-widest mb-4">CONFIRMATION: {bookingId}</p>
+        <p className="text-slate-500 text-sm mb-1">A confirmation and <strong>Google Calendar invite</strong> have been sent to <strong>{formData.email}</strong></p>
+        <div className="flex flex-col items-center mt-2 mb-6">
+          <p className="text-brand-teal font-bold text-sm tracking-widest">CONFIRMATION: {bookingId}</p>
+          <p className="text-[10px] text-slate-400 font-mono">Integration ID: {googleEventId}</p>
+        </div>
         
-        {formData.propertyAddress && (
+        {(formData.propertyAddress || formData.manualPropertyAddress) && (
           <div className="mb-8 p-3 bg-slate-50 rounded-lg border border-slate-100">
             <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">Scheduled Closing For</p>
-            <p className="text-sm font-semibold text-slate-700">{formData.propertyAddress.formattedAddress}</p>
+            <p className="text-sm font-semibold text-slate-700">{formData.propertyAddress?.formattedAddress || formData.manualPropertyAddress}</p>
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10">
-          <button className="flex items-center justify-center space-x-2 border border-slate-200 py-3 rounded-lg hover:bg-slate-50 transition-colors font-semibold text-slate-600 text-xs uppercase tracking-wider">
-            <span>📅</span> <span>Add to Calendar</span>
-          </button>
+          <a 
+            href={getGoogleCalendarUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center space-x-2 border border-slate-200 py-3 rounded-lg hover:bg-slate-50 transition-colors font-semibold text-slate-600 text-xs uppercase tracking-wider"
+          >
+            <span>📅</span> <span>Add to My Calendar</span>
+          </a>
           <button className="flex items-center justify-center space-x-2 border border-slate-200 py-3 rounded-lg hover:bg-slate-50 transition-colors font-semibold text-slate-600 text-xs uppercase tracking-wider">
             <span>📞</span> <span>Contact Closer</span>
           </button>

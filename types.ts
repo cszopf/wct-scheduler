@@ -41,6 +41,7 @@ export interface Booking {
   answers: Record<string, any>;
   status: 'confirmed' | 'cancelled' | 'rescheduled';
   createdAt: string;
+  googleEventId?: string; // New field for integration
 }
 
 export interface Hold {
