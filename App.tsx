@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import StepGuide from './components/StepGuide';
-import AddressAutocomplete from './components/AddressAutocomplete';
+import AddressAutocomplete, { StructuredAddress } from './components/AddressAutocomplete';
 import { Persona, AppointmentType, TimeSlot } from './types';
 import { APPOINTMENT_TYPES } from './constants';
 import { fetchAvailability, createBooking } from './services/mockApi';
@@ -24,7 +24,8 @@ const App: React.FC = () => {
     email: '',
     phone: '',
     notes: '',
-    propertyAddress: null as any, // Will store the structured object
+    propertyAddress: null as StructuredAddress | null,
+    manualPropertyAddress: '', // Fallback for when Google fails
     closingDate: '',
     agentName: '',
     companyName: ''
@@ -47,18 +48,39 @@ const App: React.FC = () => {
     e.preventDefault();
 
     // Validation for Buyer/Seller addresses
-    if ((selectedPersona === 'Buyer' || selectedPersona === 'Seller') && 
-        (!formData.propertyAddress?.placeId || !formData.propertyAddress?.street1 || !formData.propertyAddress?.city)) {
-      alert('Please select a valid property address from the suggestions.');
-      return;
+    if (selectedPersona === 'Buyer' || selectedPersona === 'Seller') {
+      const addr = formData.propertyAddress;
+      const isManual = !addr;
+      
+      if (isManual && !formData.manualPropertyAddress) {
+        alert('Please enter a property address.');
+        return;
+      }
+      
+      // If we have an autocomplete result, ensure it's complete
+      if (addr && (!addr.placeId || !addr.street1 || !addr.city)) {
+        alert('Please select a valid property address from the suggestions or enter it manually if suggestions are unavailable.');
+        return;
+      }
     }
 
     setIsLoading(true);
+    
+    // Construct final answers
+    const answers = {
+      ...formData,
+      propertyAddress: formData.propertyAddress || {
+        formattedAddress: formData.manualPropertyAddress,
+        street1: formData.manualPropertyAddress, // partial info for fallback
+        city: '', state: '', postalCode: '', placeId: 'manual'
+      }
+    };
+
     const id = await createBooking({
       persona: selectedPersona,
       type: selectedType?.id,
       slot: selectedSlot,
-      ...formData
+      ...answers
     });
     setBookingId(id);
     setIsLoading(false);
@@ -149,23 +171,6 @@ const App: React.FC = () => {
                 <span className="font-semibold text-slate-800">Format: {selectedType?.locationType === 'inOffice' ? 'In Person (WCT Office)' : 'Remote (Digital)'}</span>
               </div>
             </div>
-            <div className="mt-6 pt-6 border-t border-slate-100">
-              <h4 className="font-bold uppercase tracking-brand text-[10px] text-slate-400 mb-3">Preparation Checklist</h4>
-              <ul className="text-[11px] space-y-2 text-slate-500">
-                <li className="flex items-start">
-                  <span className="mr-2 text-brand-teal font-bold">•</span>
-                  <span>Valid government-issued photo ID</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2 text-brand-teal font-bold">•</span>
-                  <span>All required closing documentation</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2 text-brand-teal font-bold">•</span>
-                  <span>Proof of wire transfer (if required)</span>
-                </li>
-              </ul>
-            </div>
           </div>
         </div>
 
@@ -244,8 +249,9 @@ const App: React.FC = () => {
             <>
               <div className="md:col-span-2">
                 <AddressAutocomplete 
-                  onAddressSelect={(address) => setFormData({...formData, propertyAddress: address})}
-                  defaultValue={formData.propertyAddress?.formattedAddress}
+                  value={formData.propertyAddress?.formattedAddress || formData.manualPropertyAddress}
+                  onValueChange={(val) => setFormData({...formData, manualPropertyAddress: val})}
+                  onSelect={(address) => setFormData({...formData, propertyAddress: address})}
                 />
               </div>
               <div className="space-y-1.5">
@@ -271,10 +277,6 @@ const App: React.FC = () => {
             <textarea rows={2} value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-brand-blue outline-none transition-colors resize-none" />
           </div>
 
-          <div className="hidden">
-            <input type="text" name="b_bot_protection" tabIndex={-1} />
-          </div>
-
           <div className="md:col-span-2 pt-4">
             <button
               disabled={isLoading}
@@ -283,7 +285,7 @@ const App: React.FC = () => {
               {isLoading ? 'Securing your slot...' : 'Confirm Appointment'}
             </button>
             <p className="text-center text-[10px] text-slate-400 mt-4 leading-relaxed">
-              By confirming, you agree to our <a href="#" className="underline">Terms of Service</a>. We prioritize your privacy and data security.
+              By confirming, you agree to our <a href="#" className="underline">Terms of Service</a>.
             </p>
           </div>
         </form>

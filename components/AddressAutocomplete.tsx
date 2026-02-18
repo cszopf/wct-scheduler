@@ -1,7 +1,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { loadGoogleMapsPlaces, getLastMapsLoadError } from '../lib/googleMapsLoader';
 
-interface AddressData {
+export interface StructuredAddress {
   formattedAddress: string;
   street1: string;
   street2: string;
@@ -16,37 +17,40 @@ interface AddressData {
 }
 
 interface Props {
-  onAddressSelect: (address: AddressData) => void;
-  defaultValue?: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  onSelect: (address: StructuredAddress) => void;
+  disabled?: boolean;
 }
 
-const AddressAutocomplete: React.FC<Props> = ({ onAddressSelect, defaultValue }) => {
+const AddressAutocomplete: React.FC<Props> = ({ value, onValueChange, onSelect, disabled }) => {
   const inputRef = useRef<HTMLInputElement>(null);
-  // Fix for: Cannot find namespace 'google'. Using any to bypass missing type definitions for the Autocomplete instance.
   const autocompleteRef = useRef<any>(null);
-  const [inputValue, setInputValue] = useState(defaultValue || '');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [showDebug, setShowDebug] = useState<boolean>(false);
 
   useEffect(() => {
-    // Load Google Maps script if not already present
-    // Fix for: Property 'google' does not exist on type 'Window & typeof globalThis'. Using (window as any) for detection.
-    if (!(window as any).google) {
-      const apiKey = (window as any).process?.env?.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-      script.async = true;
-      script.defer = true;
-      script.onload = () => initAutocomplete();
-      document.head.appendChild(script);
-    } else {
-      initAutocomplete();
-    }
+    loadGoogleMapsPlaces()
+      .then(() => {
+        // Hard assert the library exists
+        if (!(window as any).google?.maps?.places?.Autocomplete) {
+          throw new Error("Places library missing after load");
+        }
+        initAutocomplete();
+        setLoadError(null);
+      })
+      .catch((err) => {
+        setLoadError(getLastMapsLoadError() || err.message);
+      })
+      .finally(() => {
+        setIsInitializing(false);
+      });
   }, []);
 
   const initAutocomplete = () => {
-    // Fix for: Property 'google' does not exist on type 'Window & typeof globalThis'.
-    if (!inputRef.current || !(window as any).google) return;
+    if (!inputRef.current) return;
 
-    // Fix for: Cannot find name 'google'. Using window cast to access the global google constructor.
     autocompleteRef.current = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
       types: ['address'],
       componentRestrictions: { country: 'us' },
@@ -57,7 +61,7 @@ const AddressAutocomplete: React.FC<Props> = ({ onAddressSelect, defaultValue })
       const place = autocompleteRef.current?.getPlace();
       if (!place || !place.address_components) return;
 
-      const address: AddressData = {
+      const address: StructuredAddress = {
         formattedAddress: place.formatted_address || '',
         street1: '',
         street2: '',
@@ -87,23 +91,78 @@ const AddressAutocomplete: React.FC<Props> = ({ onAddressSelect, defaultValue })
       });
 
       address.street1 = `${streetNumber} ${route}`.trim();
-      setInputValue(address.formattedAddress);
-      onAddressSelect(address);
+      
+      onValueChange(address.formattedAddress);
+      onSelect(address);
     });
   };
+
+  const getMaskedKey = () => {
+    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+    if (key.length <= 10) return "Key too short or missing";
+    return `${key.substring(0, 6)}...${key.substring(key.length - 4)}`;
+  };
+
+  if (loadError) {
+    return (
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Property Address *</label>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onValueChange(e.target.value)}
+          className="w-full border border-red-200 bg-red-50 rounded-lg p-2.5 text-sm focus:border-brand-blue outline-none transition-colors"
+          placeholder="Enter address manually..."
+          required
+          disabled={disabled}
+        />
+        <div className="flex flex-col space-y-1">
+          <p className="text-[9px] text-red-500 font-medium">Autocomplete unavailable. Please enter full address manually.</p>
+          <button 
+            type="button" 
+            onClick={() => setShowDebug(!showDebug)}
+            className="text-[9px] text-slate-400 underline text-left hover:text-slate-600"
+          >
+            {showDebug ? 'Hide' : 'Show'} technical diagnostic info
+          </button>
+        </div>
+
+        {showDebug && (
+          <div className="bg-slate-900 text-slate-300 p-3 rounded-lg text-[9px] font-mono leading-relaxed border border-slate-700">
+            <p className="text-brand-teal mb-1 font-bold">Diagnostic Information:</p>
+            <p><span className="text-slate-500">Hostname:</span> {window.location.hostname}</p>
+            <p><span className="text-slate-500">Key Exists:</span> {!!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? 'Yes' : 'No'}</p>
+            <p><span className="text-slate-500">Key Masked:</span> {getMaskedKey()}</p>
+            <p className="mt-1 text-red-400"><span className="text-slate-500">Error:</span> {loadError}</p>
+            <div className="mt-2 pt-2 border-t border-slate-800 text-slate-400 italic">
+              Check billing, API enablement (Maps JS + Places), and HTTP referrer restrictions in Google Cloud Console.
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-1.5">
       <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Property Address *</label>
-      <input
-        ref={inputRef}
-        type="text"
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        className="w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-brand-blue outline-none transition-colors"
-        placeholder="Start typing property address..."
-        required
-      />
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => onValueChange(e.target.value)}
+          disabled={disabled || isInitializing}
+          className={`w-full border border-slate-200 rounded-lg p-2.5 text-sm focus:border-brand-blue outline-none transition-colors ${isInitializing ? 'bg-slate-50 cursor-wait' : ''}`}
+          placeholder={isInitializing ? "Initializing Places..." : "Start typing property address..."}
+          required
+        />
+        {isInitializing && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="w-3 h-3 border-t-2 border-brand-blue rounded-full animate-spin"></div>
+          </div>
+        )}
+      </div>
       <p className="text-[10px] text-slate-400 italic">Start typing and pick a suggestion.</p>
     </div>
   );

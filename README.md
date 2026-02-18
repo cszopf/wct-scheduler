@@ -24,29 +24,29 @@ A custom-built scheduling experience for WCT integrated with Google Calendar.
    - OAuth Scopes: `https://www.googleapis.com/auth/calendar`, `https://www.googleapis.com/auth/calendar.events`
 
 ### 3. Google Places setup
-1. Enable **Places API** and **Maps JavaScript API** in Google Cloud.
-2. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in Vercel environment variables.
-3. Restrict the key to your specific domains (`https://*.vercel.app/*`, etc.) under Google Cloud Credentials.
-4. (Optional) Set `GOOGLE_PLACES_SERVER_KEY` for server-side details lookup if implemented.
+1. Enable **Maps JavaScript API** AND **Places API** in Google Cloud.
+2. Ensure **Billing** is enabled for the project.
+3. Set `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in Vercel environment variables.
+4. **CRITICAL: Restrict the key** under Google Cloud Credentials:
+   - **Application restrictions**: HTTP referrers
+   - **Allowed referrers**: 
+     - `http://localhost:3000/*`
+     - `https://wct-scheduler.vercel.app/*`
+     - `https://*.vercel.app/*`
+     - `https://worldclasstitle.com/*`
+     - `https://www.worldclasstitle.com/*`
+   - **API restrictions**: Restrict key to **Maps JavaScript API** and **Places API**.
 
-### 4. Environment Variables
-Set the following variables in your Vercel deployment:
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`: Client-side key for Places Autocomplete.
-- `GOOGLE_SERVICE_ACCOUNT_JSON`: Full JSON string from your key file.
-- `GOOGLE_DELEGATED_USER_EMAIL`: The workspace email to impersonate.
-- `GOOGLE_CALENDAR_ID_DEFAULT`: Primary calendar ID for bookings.
-- `DATABASE_URL`: Postgres connection string.
-- `RESEND_API_KEY`: For email notifications.
-- `FROM_EMAIL`: Authorized sender email.
-- `BASE_URL`: Deployment URL for manage links.
+### 4. Google Maps troubleshooting
+If autocomplete fails to load, check these common causes:
+- □ **Billing enabled**: The project MUST have a valid billing account linked.
+- □ **Maps JavaScript API enabled**: Required for the frontend loader.
+- □ **Places API enabled**: Required for the autocomplete search.
+- □ **Referrer restriction**: Ensure the exact domain you are using is in the allowed list (including `https://*.vercel.app/*` for previews).
+- □ **Redeployed**: After changing environment variables in Vercel, you MUST trigger a new deployment for changes to take effect.
+- □ **Technical Diagnostic**: Click the "Show technical diagnostic info" link in the UI during a failure for real-time error messages.
 
-### 5. Database Setup
-```bash
-npx prisma migrate dev
-npx prisma db seed
-```
-
-### 6. Local Development
+### 5. Local Development
 ```bash
 npm run dev
 ```
